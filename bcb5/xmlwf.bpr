@@ -3,15 +3,15 @@
 <PROJECT>
   <MACROS>
     <VERSION value="BCB.05.03"/>
-    <PROJECT value="debug\xmlwf.exe"/>
-    <OBJFILES value="debug\obj\xmlfile.obj debug\obj\win32filemap.obj debug\obj\codepage.obj 
-      debug\obj\xmlwf.obj"/>
+    <PROJECT value="Release\xmlwf.exe"/>
+    <OBJFILES value="Release\obj\xmlwf\codepage.obj Release\obj\xmlwf\win32filemap.obj 
+      Release\obj\xmlwf\xmlfile.obj Release\obj\xmlwf\xmlwf.obj"/>
     <RESFILES value=""/>
     <IDLFILES value=""/>
     <IDLGENFILES value=""/>
     <DEFFILE value=""/>
     <RESDEPEN value="$(RESFILES)"/>
-    <LIBFILES value=""/>
+    <LIBFILES value="Release\libexpat_mtd.lib"/>
     <LIBRARIES value=""/>
     <SPARELIBS value=""/>
     <PACKAGES value="VCL50.bpi VCLX50.bpi bcbsmp50.bpi QRPT50.bpi VCLDB50.bpi VCLBDE50.bpi 
@@ -28,22 +28,22 @@
     <USERDEFINES value="NDEBUG;WIN32;_CONSOLE;COMPILED_FROM_DSP"/>
     <SYSDEFINES value="_NO_VCL;_ASSERTE;NO_STRICT;_RTLDLL"/>
     <MAINSOURCE value="xmlwf.bpf"/>
-    <INCLUDEPATH value="$(BCB)\include;..\xmlwf;..\lib"/>
-    <LIBPATH value="$(BCB)\lib;..\xmlwf;debug"/>
-    <WARNINGS value="-w-8065 -w-par -w-8027 -w-8026 -w-csu"/>
+    <INCLUDEPATH value="..\xmlwf;$(BCB)\include"/>
+    <LIBPATH value="..\xmlwf;$(BCB)\lib;$(RELEASELIBPATH)"/>
+    <WARNINGS value="-w-8065 -w-par -w-8027 -w-8026"/>
   </MACROS>
   <OPTIONS>
     <IDLCFLAGS value="-I$(BCB)\include"/>
-    <CFLAG1 value="-O2 -X- -a8 -5 -b -k -vi -q -I..\lib -c"/>
-    <PFLAGS value="-N2debug\obj -N0debug\obj -$YD"/>
-    <RFLAGS value="/l 0x809 /d &quot;NDEBUG&quot; /i$(BCB)\include;$(BCB)\include\mfc"/>
-    <AFLAGS value="/mx /w2 /zd"/>
-    <LFLAGS value="-Idebug\obj -D&quot;&quot; -ap -Tpe -x -Gn -v -q"/>
+    <CFLAG1 value="-O2 -X- -a8 -b -k- -vi -q -tWM -I..\lib -c"/>
+    <PFLAGS value="-N2Release\obj\xmlwf -N0Release\obj\xmlwf -$Y- -$L- -$D-"/>
+    <RFLAGS value="/l 0x409 /d &quot;NDEBUG&quot; /i$(BCB)\include"/>
+    <AFLAGS value="/mx /w2 /zn"/>
+    <LFLAGS value="-IRelease\obj\xmlwf -D&quot;&quot; -ap -Tpe -x -Gn -q"/>
   </OPTIONS>
   <LINKER>
     <ALLOBJ value="c0x32.obj $(OBJFILES)"/>
     <ALLRES value="$(RESFILES)"/>
-    <ALLLIB value="$(LIBFILES) $(LIBRARIES) libexpat.lib import32.lib cw32i.lib"/>
+    <ALLLIB value="$(LIBFILES) $(LIBRARIES) import32.lib cw32mti.lib"/>
   </LINKER>
   <IDEOPTIONS>
 [Version Info]
@@ -74,58 +74,50 @@ ProductVersion=1.0.0.0
 Comments=
 
 [HistoryLists\hlIncludePath]
-Count=7
-Item0=$(BCB)\include;..\Source\xmlwf;..\Source\lib
-Item1=..\Source\xmlwf;..\xmlwf;$(BCB)\include;..\lib
-Item2=..\xmlwf;$(BCB)\include;..\lib
-Item3=..\..\..\xmlwf;$(BCB)\include;..\..\..\lib
-Item4=..\..\..\xmlwf;$(BCB)\include
-Item5=$(BCB)\include
-Item6=$(BCB)\include;$(BCB)\include\mfc;$(BCB)\include\atl;
+Count=4
+Item0=..\xmlwf;$(BCB)\include
+Item1=$(BCB)\include
+Item2=$(BCB)\include;$(BCB)\include\mfc;$(BCB)\include\atl
+Item3=$(BCB)\include;$(BCB)\include\mfc;$(BCB)\include\atl;
 
 [HistoryLists\hlLibraryPath]
-Count=9
-Item0=$(BCB)\lib;..\Source\xmlwf;.\debug
-Item1=..\Source\xmlwf;..\xmlwf;$(BCB)\lib;..\lib\Release
-Item2=..\xmlwf;$(BCB)\lib;..\lib\Release
-Item3=..\..\..\xmlwf;$(BCB)\lib;..\..\..\lib\Release
-Item4=..\..\..\xmlwf;$(BCB)\lib;..\..\..\xmlwf\$(RELEASELIBPATH);..\..\..\lib\Release
-Item5=$(BCB)\lib;$(RELEASELIBPATH);..\lib\Release
-Item6=$(BCB)\lib;$(RELEASELIBPATH);C:\src\expat2\expat\lib\Release
-Item7=$(BCB)\lib;$(RELEASELIBPATH)
-Item8=$(BCB)\lib;$(RELEASELIBPATH);;$(BCB)\lib\psdk;
+Count=5
+Item0=..\xmlwf;$(BCB)\lib;$(RELEASELIBPATH)
+Item1=..\xmlwf;$(BCB)\lib;..\xmlwf\$(RELEASELIBPATH)
+Item2=$(BCB)\lib;$(RELEASELIBPATH)
+Item3=$(BCB)\lib;$(RELEASELIBPATH);$(BCB)\lib\psdk
+Item4=$(BCB)\lib;$(RELEASELIBPATH);;$(BCB)\lib\psdk;
 
 [HistoryLists\hlDebugSourcePath]
 Count=1
 Item0=$(BCB)\source\vcl
 
 [HistoryLists\hlConditionals]
-Count=1
+Count=6
 Item0=NDEBUG;WIN32;_CONSOLE;COMPILED_FROM_DSP
+Item1=NDEBUG;WIN32;_CONSOLE;COMPILED_FROM_DSP;_DEBUG;XML_UNICODE_WCHAR_T;_UNICODE
+Item2=NDEBUG;WIN32;_CONSOLE;COMPILED_FROM_DSP;_DEBUG;XML_UNICODE_WCHAR_T
+Item3=NDEBUG;WIN32;_CONSOLE;COMPILED_FROM_DSP;_DEBUG
+Item4=NDEBUG;WIN32;_CONSOLE;COMPILED_FROM_DSP;_DEBUG;_UNICODE;XML_UNICODE_WCHAR_T
+Item5=NDEBUG;WIN32;_CONSOLE;COMPILED_FROM_DSP;_DEBUG;_UNICODE
 
 [HistoryLists\hlIntOutputDir]
-Count=7
-Item0=debug\obj
-Item1=..\..\win32\debug\obj
-Item2=..\..\..\..\win32\debug\obj
-Item3=..\..\..\..\win32\debug
-Item4=..\..\..\xmlwf\Release
-Item5=Release
-Item6=.\Release
+Count=3
+Item0=Release\obj\xmlwf
+Item1=..\xmlwf\Release
+Item2=Release
 
 [HistoryLists\hlFinalOutputDir]
-Count=5
-Item0=debug\
-Item1=..\..\..\..\win32\debug\
-Item2=..\..\..\..\win32\debug
-Item3=..\..\..\xmlwf\Release\
-Item4=.\Release\
+Count=3
+Item0=Release\
+Item1=Release
+Item2=.\Release\
 
 [Debugging]
 DebugSourceDirs=
 
 [Parameters]
-RunParams=
+RunParams=sample.xml
 HostApplication=
 RemoteHost=
 RemotePath=
