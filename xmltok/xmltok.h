@@ -49,8 +49,7 @@ extern "C" {
 #define XML_TOK_EMPTY_ELEMENT_NO_ATTS 4
 #define XML_TOK_END_TAG 5
 #define XML_TOK_DATA_CHARS 6
-/* A carriage-return in data that must be normalized to a newline. */
-#define XML_TOK_DATA_CR 7
+#define XML_TOK_DATA_NEWLINE 7
 #define XML_TOK_CDATA_SECT_OPEN 8
 #define XML_TOK_ENTITY_REF 9
 #define XML_TOK_CHAR_REF 10     /* numeric character reference */
@@ -94,8 +93,6 @@ extern "C" {
 
 /* The following token is returned only by XmlCdataSectionTok */
 #define XML_TOK_CDATA_SECT_CLOSE 40
-/* A carriage return that is ignored because it is followed by a line-feed. */
-#define XML_TOK_IGNORE_CR 41
 
 #define XML_N_STATES 3
 #define XML_PROLOG_STATE 0
@@ -145,6 +142,7 @@ struct encoding {
   int (*getAtts)(const ENCODING *enc, const char *ptr,
 	         int attsMax, ATTRIBUTE *atts);
   int (*charRefNumber)(const ENCODING *enc, const char *ptr);
+  int (*predefinedEntityName)(const ENCODING *, const char *, const char *);
   void (*updatePosition)(const ENCODING *,
 			 const char *ptr,
 			 const char *end,
@@ -227,6 +225,9 @@ the content of a literal that has already been returned by XmlTok. */
 
 #define XmlCharRefNumber(enc, ptr) \
   (((enc)->charRefNumber)(enc, ptr))
+
+#define XmlPredefinedEntityName(enc, ptr, end) \
+  (((enc)->predefinedEntityName)(enc, ptr, end))
 
 #define XmlUpdatePosition(enc, ptr, end, pos) \
   (((enc)->updatePosition)(enc, ptr, end, pos))
