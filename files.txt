@@ -16,7 +16,6 @@ xmltok/xmltok.c
 xmltok/xmltok.h
 xmltok/xmltok_impl.c
 xmltok/xmltok_impl.h
-xmltok/xmltok_ns.c
 xmlparse/hashtable.c
 xmlparse/hashtable.h
 xmlparse/xmlparse.c
@@ -27,8 +26,5 @@ xmlwf/filemap.h
 xmlwf/readfilemap.c
 xmlwf/unixfilemap.c
 xmlwf/win32filemap.c
-xmlwf/xmlfile.c
-xmlwf/xmlfile.h
-xmlwf/xmltchar.h
 xmlwf/xmlwf.c
 sample/elements.c
