@@ -49,7 +49,8 @@ extern "C" {
 #define XML_TOK_EMPTY_ELEMENT_NO_ATTS 4
 #define XML_TOK_END_TAG 5
 #define XML_TOK_DATA_CHARS 6
-#define XML_TOK_DATA_NEWLINE 7
+/* A carriage-return in data that must be normalized to a newline. */
+#define XML_TOK_DATA_CR 7
 #define XML_TOK_CDATA_SECT_OPEN 8
 #define XML_TOK_ENTITY_REF 9
 #define XML_TOK_CHAR_REF 10     /* numeric character reference */
@@ -93,6 +94,8 @@ extern "C" {
 
 /* The following token is returned only by XmlCdataSectionTok */
 #define XML_TOK_CDATA_SECT_CLOSE 40
+/* A carriage return that is ignored because it is followed by a line-feed. */
+#define XML_TOK_IGNORE_CR 41
 
 #define XML_N_STATES 3
 #define XML_PROLOG_STATE 0

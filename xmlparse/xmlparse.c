@@ -1027,7 +1027,7 @@ doContent(XML_Parser parser,
     case XML_TOK_XML_DECL:
       errorPtr = s;
       return XML_ERROR_MISPLACED_XML_PI;
-    case XML_TOK_DATA_NEWLINE:
+    case XML_TOK_DATA_CR:
       if (characterDataHandler) {
 	XML_Char c = XML_T('\n');
 	characterDataHandler(userData, &c, 1);
@@ -1220,11 +1220,13 @@ enum XML_Error doCdataSection(XML_Parser parser,
     case XML_TOK_CDATA_SECT_CLOSE:
       *startPtr = next;
       return XML_ERROR_NONE;
-    case XML_TOK_DATA_NEWLINE:
+    case XML_TOK_DATA_CR:
       if (characterDataHandler) {
 	XML_Char c = XML_T('\n');
 	characterDataHandler(userData, &c, 1);
       }
+      break;
+    case XML_TOK_IGNORE_CR:
       break;
     case XML_TOK_DATA_CHARS:
       if (characterDataHandler) {
@@ -1686,11 +1688,13 @@ appendAttributeValue(XML_Parser parser, const ENCODING *enc, int isCdata,
       next = ptr + enc->minBytesPerChar;
       /* fall through */
     case XML_TOK_ATTRIBUTE_VALUE_S:
-    case XML_TOK_DATA_NEWLINE:
+    case XML_TOK_DATA_CR:
       if (!isCdata && (poolLength(pool) == 0 || poolLastChar(pool) == XML_T(' ')))
 	break;
       if (!poolAppendChar(pool, XML_T(' ')))
 	return XML_ERROR_NO_MEMORY;
+      break;
+    case XML_TOK_IGNORE_CR:
       break;
     case XML_TOK_ENTITY_REF:
       {
@@ -1780,10 +1784,12 @@ enum XML_Error storeEntityValue(XML_Parser parser,
     case XML_TOK_TRAILING_CR:
       next = entityTextPtr + encoding->minBytesPerChar;
       /* fall through */
-    case XML_TOK_DATA_NEWLINE:
+    case XML_TOK_DATA_CR:
       if (pool->end == pool->ptr && !poolGrow(pool))
 	return XML_ERROR_NO_MEMORY;
       *(pool->ptr)++ = XML_T('\n');
+      break;
+    case XML_TOK_IGNORE_CR:
       break;
     case XML_TOK_CHAR_REF:
       {

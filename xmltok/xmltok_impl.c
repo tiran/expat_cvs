@@ -349,13 +349,8 @@ int PREFIX(cdataSectionTok)(const ENCODING *enc, const char *ptr, const char *en
     ptr += MINBPC;
     if (ptr == end)
       return XML_TOK_PARTIAL;
-    if (BYTE_TYPE(enc, ptr) == BT_LF)
-      ptr += MINBPC;
     *nextTokPtr = ptr;
-    return XML_TOK_DATA_NEWLINE;
-  case BT_LF:
-    *nextTokPtr = ptr + MINBPC;
-    return XML_TOK_DATA_NEWLINE;
+    return BYTE_TYPE(enc, ptr) == BT_LF ? XML_TOK_IGNORE_CR : XML_TOK_DATA_CR;
   INVALID_CASES(ptr, nextTokPtr)
   default:
     ptr += MINBPC;
@@ -377,7 +372,6 @@ int PREFIX(cdataSectionTok)(const ENCODING *enc, const char *ptr, const char *en
     case BT_MALFORM:
     case BT_TRAIL:
     case BT_CR:
-    case BT_LF:
     case BT_RSQB:
       *nextTokPtr = ptr;
       return XML_TOK_DATA_CHARS;
@@ -765,13 +759,8 @@ int PREFIX(contentTok)(const ENCODING *enc, const char *ptr, const char *end,
     ptr += MINBPC;
     if (ptr == end)
       return XML_TOK_TRAILING_CR;
-    if (BYTE_TYPE(enc, ptr) == BT_LF)
-      ptr += MINBPC;
     *nextTokPtr = ptr;
-    return XML_TOK_DATA_NEWLINE;
-  case BT_LF:
-    *nextTokPtr = ptr + MINBPC;
-    return XML_TOK_DATA_NEWLINE;
+    return BYTE_TYPE(enc, ptr) == BT_LF ? XML_TOK_IGNORE_CR : XML_TOK_DATA_CR;
   case BT_RSQB:
     ptr += MINBPC;
     if (ptr == end)
@@ -826,7 +815,6 @@ int PREFIX(contentTok)(const ENCODING *enc, const char *ptr, const char *end,
     case BT_MALFORM:
     case BT_TRAIL:
     case BT_CR:
-    case BT_LF:
       *nextTokPtr = ptr;
       return XML_TOK_DATA_CHARS;
     default:
@@ -1160,7 +1148,7 @@ int PREFIX(attributeValueTok)(const ENCODING *enc, const char *ptr, const char *
     case BT_LF:
       if (ptr == start) {
 	*nextTokPtr = ptr + MINBPC;
-	return XML_TOK_DATA_NEWLINE;
+	return XML_TOK_ATTRIBUTE_VALUE_S;
       }
       *nextTokPtr = ptr;
       return XML_TOK_DATA_CHARS;
@@ -1169,10 +1157,8 @@ int PREFIX(attributeValueTok)(const ENCODING *enc, const char *ptr, const char *
 	ptr += MINBPC;
 	if (ptr == end)
 	  return XML_TOK_TRAILING_CR;
-	if (BYTE_TYPE(enc, ptr) == BT_LF)
-	  ptr += MINBPC;
 	*nextTokPtr = ptr;
-	return XML_TOK_DATA_NEWLINE;
+	return BYTE_TYPE(enc, ptr) == BT_LF ? XML_TOK_IGNORE_CR : XML_TOK_DATA_CR;
       }
       *nextTokPtr = ptr;
       return XML_TOK_DATA_CHARS;
@@ -1216,22 +1202,13 @@ int PREFIX(entityValueTok)(const ENCODING *enc, const char *ptr, const char *end
 	return PREFIX(scanPercent)(enc, ptr + MINBPC, end, nextTokPtr);
       *nextTokPtr = ptr;
       return XML_TOK_DATA_CHARS;
-    case BT_LF:
-      if (ptr == start) {
-	*nextTokPtr = ptr + MINBPC;
-	return XML_TOK_DATA_NEWLINE;
-      }
-      *nextTokPtr = ptr;
-      return XML_TOK_DATA_CHARS;
     case BT_CR:
       if (ptr == start) {
 	ptr += MINBPC;
 	if (ptr == end)
 	  return XML_TOK_TRAILING_CR;
-	if (BYTE_TYPE(enc, ptr) == BT_LF)
-	  ptr += MINBPC;
 	*nextTokPtr = ptr;
-	return XML_TOK_DATA_NEWLINE;
+	return BYTE_TYPE(enc, ptr) == BT_LF ? XML_TOK_IGNORE_CR : XML_TOK_DATA_CR;
       }
       *nextTokPtr = ptr;
       return XML_TOK_DATA_CHARS;
