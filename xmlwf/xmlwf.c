@@ -28,15 +28,11 @@ Contributor(s):
 #include "xmlfile.h"
 #include "xmltchar.h"
 
-#ifdef XML_URL
-#include "xmlurl.h"
-#endif
-
 #ifdef _MSC_VER
 #include <crtdbg.h>
 #endif
 
-#define NSSEP T('\001')
+#define NSSEP T('#')
 
 static void characterData(void *userData, const XML_Char *s, int len)
 {
@@ -376,6 +372,33 @@ void metaNotationDecl(XML_Parser parser,
   fputts(T("/>\n"), fp);
 }
 
+static
+void metaStartNamespaceDecl(XML_Parser parser,
+			    const XML_Char *prefix,
+			    const XML_Char *uri)
+{
+  FILE *fp = XML_GetUserData(parser);
+  fputts(T("<startns"), fp);
+  if (prefix)
+    ftprintf(fp, T(" prefix=\"%s\""), prefix);
+  if (uri) {
+    fputts(T(" ns=\""), fp);
+    characterData(fp, uri, tcslen(uri));
+    fputts(T("\"/>\n"), fp);
+  }
+  else
+    fputts(T("/>\n"), fp);
+}
+
+static
+void metaEndNamespaceDecl(XML_Parser parser, const XML_Char *prefix)
+{
+  FILE *fp = XML_GetUserData(parser);
+  if (!prefix)
+    fputts(T("<endns/>\n"), fp);
+  else
+    ftprintf(fp, T("<endns prefix=\"%s\"/>\n"), prefix);
+}
 
 static
 int unknownEncodingConvert(void *data, const char *p)
@@ -437,9 +460,6 @@ int tmain(int argc, XML_Char **argv)
   int windowsCodePages = 0;
   int outputType = 0;
   int useNamespaces = 0;
-#ifdef XML_URL
-  int url = 0;
-#endif
 
 #ifdef _MSC_VER
   _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF|_CRTDBG_LEAK_CHECK_DF);
@@ -459,26 +479,18 @@ int tmain(int argc, XML_Char **argv)
     }
     if (argv[i][j] == T('n')) {
       useNamespaces = 1;
-      outputType = 0;
       j++;
     }
     if (argv[i][j] == T('x')) {
       processFlags |= XML_EXTERNAL_ENTITIES;
       j++;
     }
-#ifdef XML_URL
-    if (argv[i][j] == T('u')) {
-      url = 1;
-      j++;
-    }
-#endif
     if (argv[i][j] == T('w')) {
       windowsCodePages = 1;
       j++;
     }
     if (argv[i][j] == T('m')) {
       outputType = 'm';
-      useNamespaces = 0;
       j++;
     }
     if (argv[i][j] == T('c')) {
@@ -517,10 +529,6 @@ int tmain(int argc, XML_Char **argv)
   }
   if (i == argc)
     usage(argv[0]);
-#ifdef XML_URL
-  if (url)
-    XML_URLInit();
-#endif
   for (; i < argc; i++) {
     FILE *fp = 0;
     XML_Char *outName = 0;
@@ -562,6 +570,7 @@ int tmain(int argc, XML_Char **argv)
 	XML_SetCharacterDataHandler(parser, metaCharacterData);
 	XML_SetUnparsedEntityDeclHandler(parser, metaUnparsedEntityDecl);
 	XML_SetNotationDeclHandler(parser, metaNotationDecl);
+	XML_SetNamespaceDeclHandler(parser, metaStartNamespaceDecl, metaEndNamespaceDecl);
 	metaStartDocument(parser);
 	break;
       case 'c':
@@ -590,12 +599,7 @@ int tmain(int argc, XML_Char **argv)
     }
     if (windowsCodePages)
       XML_SetUnknownEncodingHandler(parser, unknownEncoding, 0);
-#ifdef XML_URL
-    if (url)
-      result = XML_ProcessURL(parser, argv[i], 0);
-    else
-#endif
-      result = XML_ProcessFile(parser, argv[i], processFlags);
+    result = XML_ProcessFile(parser, argv[i], processFlags);
     if (outputDir) {
       if (outputType == 'm')
 	metaEndDocument(parser);
@@ -606,9 +610,5 @@ int tmain(int argc, XML_Char **argv)
     }
     XML_ParserFree(parser);
   }
-#ifdef XML_URL
-  if (url)
-    XML_URLUninit();
-#endif
   return 0;
 }
