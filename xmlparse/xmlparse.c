@@ -28,7 +28,6 @@ Contributor(s):
 #define XML_ENCODE_MAX XML_UTF16_ENCODE_MAX
 #define XmlConvert XmlUtf16Convert
 #define XmlGetInternalEncoding XmlGetUtf16InternalEncoding
-#define XmlGetInternalEncodingNS XmlGetUtf16InternalEncodingNS
 #define XmlEncode XmlUtf16Encode
 #define MUST_CONVERT(enc, s) (!(enc)->isUtf16 || (((unsigned long)s) & 1))
 typedef unsigned short ICHAR;
@@ -36,23 +35,10 @@ typedef unsigned short ICHAR;
 #define XML_ENCODE_MAX XML_UTF8_ENCODE_MAX
 #define XmlConvert XmlUtf8Convert
 #define XmlGetInternalEncoding XmlGetUtf8InternalEncoding
-#define XmlGetInternalEncodingNS XmlGetUtf8InternalEncodingNS
 #define XmlEncode XmlUtf8Encode
 #define MUST_CONVERT(enc, s) (!(enc)->isUtf8)
 typedef char ICHAR;
 #endif
-
-
-#ifndef XMLNS
-
-#define XmlInitEncodingNS XmlInitEncoding
-#define XmlInitUnknownEncodingNS XmlInitUnknownEncoding
-#undef XmlGetInternalEncodingNS
-#define XmlGetInternalEncodingNS XmlGetInternalEncoding
-#define XmlParseXmlDeclNS XmlParseXmlDecl
-
-#endif
-
 
 #ifdef XML_UNICODE_WCHAR_T
 #define XML_T(x) L ## x
@@ -74,23 +60,6 @@ typedef char ICHAR;
 #define INIT_BLOCK_SIZE 1024
 #define INIT_BUFFER_SIZE 1024
 
-#define EXPAND_SPARE 24
-
-typedef struct binding {
-  struct prefix *prefix;
-  struct binding *nextTagBinding;
-  struct binding *prevPrefixBinding;
-  const struct attribute_id *attId;
-  XML_Char *uri;
-  int uriLen;
-  int uriAlloc;
-} BINDING;
-
-typedef struct prefix {
-  const XML_Char *name;
-  BINDING *binding;
-} PREFIX;
-
 typedef struct tag {
   struct tag *parent;
   const char *rawName;
@@ -98,7 +67,6 @@ typedef struct tag {
   const XML_Char *name;
   char *buf;
   char *bufEnd;
-  BINDING *bindings;
 } TAG;
 
 typedef struct {
@@ -128,11 +96,9 @@ typedef struct {
 
 /* The XML_Char before the name is used to determine whether
 an attribute has been specified. */
-typedef struct attribute_id {
+typedef struct {
   XML_Char *name;
-  PREFIX *prefix;
   char maybeTokenized;
-  char xmlns;
 } ATTRIBUTE_ID;
 
 typedef struct {
@@ -143,7 +109,6 @@ typedef struct {
 
 typedef struct {
   const XML_Char *name;
-  PREFIX *prefix;
   int nDefaultAtts;
   int allocDefaultAtts;
   DEFAULT_ATTRIBUTE *defaultAtts;
@@ -153,20 +118,11 @@ typedef struct {
   HASH_TABLE generalEntities;
   HASH_TABLE elementTypes;
   HASH_TABLE attributeIds;
-  HASH_TABLE prefixes;
   STRING_POOL pool;
   int complete;
   int standalone;
   const XML_Char *base;
-  PREFIX defaultPrefix;
 } DTD;
-
-typedef struct open_internal_entity {
-  const char *internalEventPtr;
-  const char *internalEventEndPtr;
-  struct open_internal_entity *next;
-  ENTITY *entity;
-} OPEN_INTERNAL_ENTITY;
 
 typedef enum XML_Error Processor(XML_Parser parser,
 				 const char *start,
@@ -195,10 +151,7 @@ doContent(XML_Parser parser, int startTagLevel, const ENCODING *enc,
 	  const char *start, const char *end, const char **endPtr);
 static enum XML_Error
 doCdataSection(XML_Parser parser, const ENCODING *, const char **startPtr, const char *end, const char **nextPtr);
-static enum XML_Error storeAtts(XML_Parser parser, const ENCODING *, const char *s,
-				const XML_Char **tagNamePtr, BINDING **bindingsPtr);
-static
-int addBinding(XML_Parser parser, PREFIX *prefix, const ATTRIBUTE_ID *attId, const XML_Char *uri, BINDING **bindingsPtr);
+static enum XML_Error storeAtts(XML_Parser parser, const ENCODING *, const XML_Char *tagName, const char *s);
 static int
 defineAttribute(ELEMENT_TYPE *type, ATTRIBUTE_ID *, int isCdata, const XML_Char *dfltValue);
 static enum XML_Error
@@ -209,18 +162,15 @@ appendAttributeValue(XML_Parser parser, const ENCODING *, int isCdata, const cha
 		    STRING_POOL *);
 static ATTRIBUTE_ID *
 getAttributeId(XML_Parser parser, const ENCODING *enc, const char *start, const char *end);
-static int setElementTypePrefix(XML_Parser parser, ELEMENT_TYPE *);
 static enum XML_Error
 storeEntityValue(XML_Parser parser, const char *start, const char *end);
 static int
 reportProcessingInstruction(XML_Parser parser, const ENCODING *enc, const char *start, const char *end);
-static int
-reportComment(XML_Parser parser, const ENCODING *enc, const char *start, const char *end);
 static void
 reportDefault(XML_Parser parser, const ENCODING *enc, const char *start, const char *end);
 
-static const XML_Char *getContext(XML_Parser parser);
-static int setContext(XML_Parser parser, const XML_Char *context);
+static const XML_Char *getOpenEntityNames(XML_Parser parser);
+static int setOpenEntityNames(XML_Parser parser, const XML_Char *openEntityNames);
 static void normalizePublicId(XML_Char *s);
 static int dtdInit(DTD *);
 static void dtdDestroy(DTD *);
@@ -267,7 +217,6 @@ typedef struct {
   XML_EndElementHandler endElementHandler;
   XML_CharacterDataHandler characterDataHandler;
   XML_ProcessingInstructionHandler processingInstructionHandler;
-  XML_CommentHandler commentHandler;
   XML_DefaultHandler defaultHandler;
   XML_UnparsedEntityDeclHandler unparsedEntityDeclHandler;
   XML_NotationDeclHandler notationDeclHandler;
@@ -276,7 +225,6 @@ typedef struct {
   const ENCODING *encoding;
   INIT_ENCODING initEncoding;
   const XML_Char *protocolEncodingName;
-  int ns;
   void *unknownEncodingMem;
   void *unknownEncodingData;
   void *unknownEncodingHandlerData;
@@ -287,8 +235,6 @@ typedef struct {
   const char *eventPtr;
   const char *eventEndPtr;
   const char *positionPtr;
-  OPEN_INTERNAL_ENTITY *openInternalEntities;
-  int defaultExpandInternalEntities;
   int tagLevel;
   ENTITY *declEntity;
   const XML_Char *declNotationName;
@@ -299,8 +245,6 @@ typedef struct {
   DTD dtd;
   TAG *tagStack;
   TAG *freeTagList;
-  BINDING *inheritedBindings;
-  BINDING *freeBindingList;
   int attsSize;
   ATTRIBUTE *atts;
   POSITION position;
@@ -309,7 +253,6 @@ typedef struct {
   char *groupConnector;
   unsigned groupSize;
   int hadExternalDoctype;
-  XML_Char namespaceSeparator;
 } Parser;
 
 #define userData (((Parser *)parser)->userData)
@@ -318,7 +261,6 @@ typedef struct {
 #define endElementHandler (((Parser *)parser)->endElementHandler)
 #define characterDataHandler (((Parser *)parser)->characterDataHandler)
 #define processingInstructionHandler (((Parser *)parser)->processingInstructionHandler)
-#define commentHandler (((Parser *)parser)->commentHandler)
 #define defaultHandler (((Parser *)parser)->defaultHandler)
 #define unparsedEntityDeclHandler (((Parser *)parser)->unparsedEntityDeclHandler)
 #define notationDeclHandler (((Parser *)parser)->notationDeclHandler)
@@ -332,7 +274,6 @@ typedef struct {
   (((Parser *)parser)->unknownEncodingHandlerData)
 #define unknownEncodingRelease (((Parser *)parser)->unknownEncodingRelease)
 #define protocolEncodingName (((Parser *)parser)->protocolEncodingName)
-#define ns (((Parser *)parser)->ns)
 #define prologState (((Parser *)parser)->prologState)
 #define processor (((Parser *)parser)->processor)
 #define errorCode (((Parser *)parser)->errorCode)
@@ -340,8 +281,6 @@ typedef struct {
 #define eventEndPtr (((Parser *)parser)->eventEndPtr)
 #define positionPtr (((Parser *)parser)->positionPtr)
 #define position (((Parser *)parser)->position)
-#define openInternalEntities (((Parser *)parser)->openInternalEntities)
-#define defaultExpandInternalEntities (((Parser *)parser)->defaultExpandInternalEntities)
 #define tagLevel (((Parser *)parser)->tagLevel)
 #define buffer (((Parser *)parser)->buffer)
 #define bufferPtr (((Parser *)parser)->bufferPtr)
@@ -359,8 +298,6 @@ typedef struct {
 #define declAttributeId (((Parser *)parser)->declAttributeId)
 #define declAttributeIsCdata (((Parser *)parser)->declAttributeIsCdata)
 #define freeTagList (((Parser *)parser)->freeTagList)
-#define freeBindingList (((Parser *)parser)->freeBindingList)
-#define inheritedBindings (((Parser *)parser)->inheritedBindings)
 #define tagStack (((Parser *)parser)->tagStack)
 #define atts (((Parser *)parser)->atts)
 #define attsSize (((Parser *)parser)->attsSize)
@@ -369,7 +306,6 @@ typedef struct {
 #define groupConnector (((Parser *)parser)->groupConnector)
 #define groupSize (((Parser *)parser)->groupSize)
 #define hadExternalDoctype (((Parser *)parser)->hadExternalDoctype)
-#define namespaceSeparator (((Parser *)parser)->namespaceSeparator)
 
 XML_Parser XML_ParserCreate(const XML_Char *encodingName)
 {
@@ -384,7 +320,6 @@ XML_Parser XML_ParserCreate(const XML_Char *encodingName)
   endElementHandler = 0;
   characterDataHandler = 0;
   processingInstructionHandler = 0;
-  commentHandler = 0;
   defaultHandler = 0;
   unparsedEntityDeclHandler = 0;
   notationDeclHandler = 0;
@@ -406,12 +341,9 @@ XML_Parser XML_ParserCreate(const XML_Char *encodingName)
   eventPtr = 0;
   eventEndPtr = 0;
   positionPtr = 0;
-  openInternalEntities = 0;
   tagLevel = 0;
   tagStack = 0;
   freeTagList = 0;
-  freeBindingList = 0;
-  inheritedBindings = 0;
   attsSize = INIT_ATTS_SIZE;
   atts = malloc(attsSize * sizeof(ATTRIBUTE));
   dataBuf = malloc(INIT_DATA_BUF_SIZE * sizeof(XML_Char));
@@ -422,8 +354,6 @@ XML_Parser XML_ParserCreate(const XML_Char *encodingName)
   unknownEncodingRelease = 0;
   unknownEncodingData = 0;
   unknownEncodingHandlerData = 0;
-  namespaceSeparator = '!';
-  ns = 0;
   poolInit(&tempPool);
   poolInit(&temp2Pool);
   protocolEncodingName = encodingName ? poolCopyString(&tempPool, encodingName) : 0;
@@ -437,37 +367,8 @@ XML_Parser XML_ParserCreate(const XML_Char *encodingName)
   return parser;
 }
 
-XML_Parser XML_ParserCreateNS(const XML_Char *encodingName, XML_Char nsSep)
-{
-  static
-  const XML_Char implicitContext[] = {
-    XML_T('x'), XML_T('m'), XML_T('l'), XML_T('='),
-    XML_T('h'), XML_T('t'), XML_T('t'), XML_T('p'), XML_T(':'),
-    XML_T('/'), XML_T('/'), XML_T('w'), XML_T('w'), XML_T('w'),
-    XML_T('.'), XML_T('w'), XML_T('3'),
-    XML_T('.'), XML_T('o'), XML_T('r'), XML_T('g'),
-    XML_T('/'), XML_T('X'), XML_T('M'), XML_T('L'),
-    XML_T('/'), XML_T('1'), XML_T('9'), XML_T('9'), XML_T('8'),
-    XML_T('/'), XML_T('n'), XML_T('a'), XML_T('m'), XML_T('e'),
-    XML_T('s'), XML_T('p'), XML_T('a'), XML_T('c'), XML_T('e'),
-    XML_T('\0')
-  };
-
-  XML_Parser parser = XML_ParserCreate(encodingName);
-  if (parser) {
-    XmlInitEncodingNS(&initEncoding, &encoding, 0);
-    ns = 1;
-    namespaceSeparator = nsSep;
-  }
-  if (!setContext(parser, implicitContext)) {
-    XML_ParserFree(parser);
-    return 0;
-  }
-  return parser;
-}
-
 XML_Parser XML_ExternalEntityParserCreate(XML_Parser oldParser,
-					  const XML_Char *context,
+					  const XML_Char *openEntityNames,
 					  const XML_Char *encodingName)
 {
   XML_Parser parser = oldParser;
@@ -476,24 +377,19 @@ XML_Parser XML_ExternalEntityParserCreate(XML_Parser oldParser,
   XML_EndElementHandler oldEndElementHandler = endElementHandler;
   XML_CharacterDataHandler oldCharacterDataHandler = characterDataHandler;
   XML_ProcessingInstructionHandler oldProcessingInstructionHandler = processingInstructionHandler;
-  XML_CommentHandler oldCommentHandler = commentHandler;
   XML_DefaultHandler oldDefaultHandler = defaultHandler;
   XML_ExternalEntityRefHandler oldExternalEntityRefHandler = externalEntityRefHandler;
   XML_UnknownEncodingHandler oldUnknownEncodingHandler = unknownEncodingHandler;
   void *oldUserData = userData;
   void *oldHandlerArg = handlerArg;
-  int oldDefaultExpandInternalEntities = defaultExpandInternalEntities;
  
-  parser = (ns
-            ? XML_ParserCreateNS(encodingName, namespaceSeparator)
-	    : XML_ParserCreate(encodingName));
+  parser = XML_ParserCreate(encodingName);
   if (!parser)
     return 0;
   startElementHandler = oldStartElementHandler;
   endElementHandler = oldEndElementHandler;
   characterDataHandler = oldCharacterDataHandler;
   processingInstructionHandler = oldProcessingInstructionHandler;
-  commentHandler = oldCommentHandler;
   defaultHandler = oldDefaultHandler;
   externalEntityRefHandler = oldExternalEntityRefHandler;
   unknownEncodingHandler = oldUnknownEncodingHandler;
@@ -502,26 +398,12 @@ XML_Parser XML_ExternalEntityParserCreate(XML_Parser oldParser,
     handlerArg = userData;
   else
     handlerArg = parser;
-  defaultExpandInternalEntities = oldDefaultExpandInternalEntities;
-  if (!dtdCopy(&dtd, oldDtd) || !setContext(parser, context)) {
+  if (!dtdCopy(&dtd, oldDtd) || !setOpenEntityNames(parser, openEntityNames)) {
     XML_ParserFree(parser);
     return 0;
   }
   processor = externalEntityInitProcessor;
   return parser;
-}
-
-static
-void destroyBindings(BINDING *bindings)
-{
-  for (;;) {
-    BINDING *b = bindings;
-    if (!b)
-      break;
-    bindings = b->nextTagBinding;
-    free(b->uri);
-    free(b);
-  }
 }
 
 void XML_ParserFree(XML_Parser parser)
@@ -537,11 +419,8 @@ void XML_ParserFree(XML_Parser parser)
     p = tagStack;
     tagStack = tagStack->parent;
     free(p->buf);
-    destroyBindings(p->bindings);
     free(p);
   }
-  destroyBindings(freeBindingList);
-  destroyBindings(inheritedBindings);
   poolDestroy(&tempPool);
   poolDestroy(&temp2Pool);
   dtdDestroy(&dtd);
@@ -606,24 +485,10 @@ void XML_SetProcessingInstructionHandler(XML_Parser parser,
   processingInstructionHandler = handler;
 }
 
-void XML_SetCommentHandler(XML_Parser parser,
-			   XML_CommentHandler handler)
-{
-  commentHandler = handler;
-}
-
 void XML_SetDefaultHandler(XML_Parser parser,
 			   XML_DefaultHandler handler)
 {
   defaultHandler = handler;
-  defaultExpandInternalEntities = 0;
-}
-
-void XML_SetDefaultHandlerExpand(XML_Parser parser,
-				 XML_DefaultHandler handler)
-{
-  defaultHandler = handler;
-  defaultExpandInternalEntities = 1;
 }
 
 void XML_SetUnparsedEntityDeclHandler(XML_Parser parser,
@@ -791,15 +656,8 @@ int XML_GetCurrentColumnNumber(XML_Parser parser)
 
 void XML_DefaultCurrent(XML_Parser parser)
 {
-  if (defaultHandler) {
-    if (openInternalEntities)
-      reportDefault(parser,
-	            ns ? XmlGetInternalEncodingNS() : XmlGetInternalEncoding(),
-		    openInternalEntities->internalEventPtr,
-		    openInternalEntities->internalEventEndPtr);
-    else
-      reportDefault(parser, encoding, eventPtr, eventEndPtr);
-  }
+  if (defaultHandler)
+    reportDefault(parser, encoding, eventPtr, eventEndPtr);
 }
 
 const XML_LChar *XML_ErrorString(int code)
@@ -940,18 +798,17 @@ doContent(XML_Parser parser,
 	  const char *end,
 	  const char **nextPtr)
 {
-  const ENCODING *internalEnc = ns ? XmlGetInternalEncodingNS() : XmlGetInternalEncoding();
+  const ENCODING *internalEnc = XmlGetInternalEncoding();
+  const char *dummy;
   const char **eventPP;
   const char **eventEndPP;
   if (enc == encoding) {
     eventPP = &eventPtr;
+    *eventPP = s;
     eventEndPP = &eventEndPtr;
   }
-  else {
-    eventPP = &(openInternalEntities->internalEventPtr);
-    eventEndPP = &(openInternalEntities->internalEventEndPtr);
-  }
-  *eventPP = s;
+  else
+    eventPP = eventEndPP = &dummy;
   for (;;) {
     const char *next;
     int tok = XmlContentTok(enc, s, end, &next);
@@ -1035,17 +892,14 @@ doContent(XML_Parser parser,
 	if (entity) {
 	  if (entity->textPtr) {
 	    enum XML_Error result;
-	    OPEN_INTERNAL_ENTITY openEntity;
-	    if (defaultHandler && !defaultExpandInternalEntities) {
+	    if (defaultHandler) {
 	      reportDefault(parser, enc, s, next);
 	      break;
 	    }
+	    /* Protect against the possibility that somebody sets
+	       the defaultHandler from inside another handler. */
+	    *eventEndPP = *eventPP;
 	    entity->open = 1;
-	    openEntity.next = openInternalEntities;
-	    openInternalEntities = &openEntity;
-	    openEntity.entity = entity;
-	    openEntity.internalEventPtr = 0;
-	    openEntity.internalEventEndPtr = 0;
 	    result = doContent(parser,
 			       tagLevel,
 			       internalEnc,
@@ -1053,18 +907,17 @@ doContent(XML_Parser parser,
 			       (char *)(entity->textPtr + entity->textLen),
 			       0);
 	    entity->open = 0;
-	    openInternalEntities = openEntity.next;
 	    if (result)
 	      return result;
 	  }
 	  else if (externalEntityRefHandler) {
-	    const XML_Char *context;
+	    const XML_Char *openEntityNames;
 	    entity->open = 1;
-	    context = getContext(parser);
+	    openEntityNames = getOpenEntityNames(parser);
 	    entity->open = 0;
-	    if (!context)
+	    if (!openEntityNames)
 	      return XML_ERROR_NO_MEMORY;
-	    if (!externalEntityRefHandler(parser, context, dtd.base, entity->systemId, entity->publicId))
+	    if (!externalEntityRefHandler(parser, openEntityNames, dtd.base, entity->systemId, entity->publicId))
 	      return XML_ERROR_EXTERNAL_ENTITY_HANDLING;
 	    poolDiscard(&tempPool);
 	  }
@@ -1075,7 +928,7 @@ doContent(XML_Parser parser,
       }
     case XML_TOK_START_TAG_WITH_ATTS:
       if (!startElementHandler) {
-	enum XML_Error result = storeAtts(parser, enc, s, 0, 0);
+	enum XML_Error result = storeAtts(parser, enc, 0, s);
 	if (result)
 	  return result;
       }
@@ -1096,7 +949,6 @@ doContent(XML_Parser parser,
 	    return XML_ERROR_NO_MEMORY;
 	  tag->bufEnd = tag->buf + INIT_TAG_BUF_SIZE;
 	}
-	tag->bindings = 0;
 	tag->parent = tagStack;
 	tagStack = tag;
 	tag->rawName = s + enc->minBytesPerChar;
@@ -1140,7 +992,7 @@ doContent(XML_Parser parser,
 	      tag->rawName = tag->buf;
 	  }
 	  *toPtr = XML_T('\0');
-	  result = storeAtts(parser, enc, s, &(tag->name), &(tag->bindings));
+	  result = storeAtts(parser, enc, tag->name, s);
 	  if (result)
 	    return result;
 	  startElementHandler(handlerArg, tag->name, (const XML_Char **)atts);
@@ -1155,7 +1007,7 @@ doContent(XML_Parser parser,
       }
     case XML_TOK_EMPTY_ELEMENT_WITH_ATTS:
       if (!startElementHandler) {
-	enum XML_Error result = storeAtts(parser, enc, s, 0, 0);
+	enum XML_Error result = storeAtts(parser, enc, 0, s);
 	if (result)
 	  return result;
       }
@@ -1163,33 +1015,24 @@ doContent(XML_Parser parser,
     case XML_TOK_EMPTY_ELEMENT_NO_ATTS:
       if (startElementHandler || endElementHandler) {
 	const char *rawName = s + enc->minBytesPerChar;
-	enum XML_Error result;
-	BINDING *bindings = 0;
 	const XML_Char *name = poolStoreString(&tempPool, enc, rawName,
 					       rawName
 					       + XmlNameLength(enc, rawName));
 	if (!name)
 	  return XML_ERROR_NO_MEMORY;
 	poolFinish(&tempPool);
-	result = storeAtts(parser, enc, s, &name, &bindings);
-	if (result)
-	  return result;
-	poolFinish(&tempPool);
-	if (startElementHandler)
+	if (startElementHandler) {
+	  enum XML_Error result = storeAtts(parser, enc, name, s);
+	  if (result)
+	    return result;
 	  startElementHandler(handlerArg, name, (const XML_Char **)atts);
+	}
 	if (endElementHandler) {
 	  if (startElementHandler)
 	    *eventPP = *eventEndPP;
 	  endElementHandler(handlerArg, name);
 	}
 	poolClear(&tempPool);
-	while (bindings) {
-	  BINDING *b = bindings;
-	  bindings = bindings->nextTagBinding;
-	  b->nextTagBinding = freeBindingList;
-	  freeBindingList = b;
-	  b->prefix->binding = b->prevPrefixBinding;
-	}
       }
       else if (defaultHandler)
 	reportDefault(parser, enc, s, next);
@@ -1214,17 +1057,20 @@ doContent(XML_Parser parser,
 	  return XML_ERROR_TAG_MISMATCH;
 	}
 	--tagLevel;
-	if (endElementHandler && tag->name)
-	  endElementHandler(handlerArg, tag->name);
+	if (endElementHandler) {
+	  if (tag->name)
+	    endElementHandler(handlerArg, tag->name);
+	  else {
+	    const XML_Char *name = poolStoreString(&tempPool, enc, rawName,
+	                                           rawName + len);
+	    if (!name)
+	      return XML_ERROR_NO_MEMORY;
+	    endElementHandler(handlerArg, name);
+	    poolClear(&tempPool);
+	  }
+	}
 	else if (defaultHandler)
 	  reportDefault(parser, enc, s, next);
-	while (tag->bindings) {
-	  BINDING *b = tag->bindings;
-	  tag->bindings = tag->bindings->nextTagBinding;
-	  b->nextTagBinding = freeBindingList;
-	  freeBindingList = b;
-	  b->prefix->binding = b->prevPrefixBinding;
-	}
 	if (tagLevel == 0)
 	  return epilogProcessor(parser, next, end, nextPtr);
       }
@@ -1318,10 +1164,6 @@ doContent(XML_Parser parser,
       if (!reportProcessingInstruction(parser, enc, s, next))
 	return XML_ERROR_NO_MEMORY;
       break;
-    case XML_TOK_COMMENT:
-      if (!reportComment(parser, enc, s, next))
-	return XML_ERROR_NO_MEMORY;
-      break;
     default:
       if (defaultHandler)
 	reportDefault(parser, enc, s, next);
@@ -1332,37 +1174,24 @@ doContent(XML_Parser parser,
   /* not reached */
 }
 
-/* If tagNamePtr is non-null, build a real list of attributes,
+/* If tagName is non-null, build a real list of attributes,
 otherwise just check the attributes for well-formedness. */
 
 static enum XML_Error storeAtts(XML_Parser parser, const ENCODING *enc,
-				const char *s, const XML_Char **tagNamePtr,
-				BINDING **bindingsPtr)
+				const XML_Char *tagName, const char *s)
 {
   ELEMENT_TYPE *elementType = 0;
   int nDefaultAtts = 0;
   const XML_Char **appAtts;
-  int attIndex = 0;
   int i;
   int n;
-  int nPrefixes = 0;
-  BINDING *binding;
-  const XML_Char *localPart;
 
-  if (tagNamePtr) {
-    elementType = (ELEMENT_TYPE *)lookup(&dtd.elementTypes, *tagNamePtr, 0);
-    if (!elementType) {
-      *tagNamePtr = poolCopyString(&dtd.pool, *tagNamePtr);
-      if (!*tagNamePtr)
-	return XML_ERROR_NO_MEMORY;
-      elementType = (ELEMENT_TYPE *)lookup(&dtd.elementTypes, *tagNamePtr, sizeof(ELEMENT_TYPE));
-      if (!elementType)
-        return XML_ERROR_NO_MEMORY;
-      if (ns && !setElementTypePrefix(parser, elementType))
-        return XML_ERROR_NO_MEMORY;
-    }
-    nDefaultAtts = elementType->nDefaultAtts;
+  if (tagName) {
+    elementType = (ELEMENT_TYPE *)lookup(&dtd.elementTypes, tagName, 0);
+    if (elementType)
+      nDefaultAtts = elementType->nDefaultAtts;
   }
+  
   n = XmlGetAttributes(enc, s, attsSize, atts);
   if (n + nDefaultAtts > attsSize) {
     int oldAttsSize = attsSize;
@@ -1376,8 +1205,8 @@ static enum XML_Error storeAtts(XML_Parser parser, const ENCODING *enc,
   appAtts = (const XML_Char **)atts;
   for (i = 0; i < n; i++) {
     ATTRIBUTE_ID *attId = getAttributeId(parser, enc, atts[i].name,
-					 atts[i].name
-					 + XmlNameLength(enc, atts[i].name));
+					  atts[i].name
+					  + XmlNameLength(enc, atts[i].name));
     if (!attId)
       return XML_ERROR_NO_MEMORY;
     if ((attId->name)[-1]) {
@@ -1386,7 +1215,7 @@ static enum XML_Error storeAtts(XML_Parser parser, const ENCODING *enc,
       return XML_ERROR_DUPLICATE_ATTRIBUTE;
     }
     (attId->name)[-1] = 1;
-    appAtts[attIndex++] = attId->name;
+    appAtts[i << 1] = attId->name;
     if (!atts[i].normalized) {
       enum XML_Error result;
       int isCdata = 1;
@@ -1406,165 +1235,36 @@ static enum XML_Error storeAtts(XML_Parser parser, const ENCODING *enc,
 			           &tempPool);
       if (result)
 	return result;
-      if (tagNamePtr) {
-	appAtts[attIndex] = poolStart(&tempPool);
+      if (tagName) {
+	appAtts[(i << 1) + 1] = poolStart(&tempPool);
 	poolFinish(&tempPool);
       }
       else
 	poolDiscard(&tempPool);
     }
-    else if (tagNamePtr) {
-      appAtts[attIndex] = poolStoreString(&tempPool, enc, atts[i].valuePtr, atts[i].valueEnd);
-      if (appAtts[attIndex] == 0)
+    else if (tagName) {
+      appAtts[(i << 1) + 1] = poolStoreString(&tempPool, enc, atts[i].valuePtr, atts[i].valueEnd);
+      if (appAtts[(i << 1) + 1] == 0)
 	return XML_ERROR_NO_MEMORY;
       poolFinish(&tempPool);
     }
-    if (attId->prefix && tagNamePtr) {
-      if (attId->xmlns) {
-        if (!addBinding(parser, attId->prefix, attId, appAtts[attIndex], bindingsPtr))
-          return XML_ERROR_NO_MEMORY;
-        --attIndex;
-      }
-      else {
-        attIndex++;
-        nPrefixes++;
-        (attId->name)[-1] = 2;
-      }
-    }
-    else
-      attIndex++;
   }
-  if (tagNamePtr) {
+  if (tagName) {
     int j;
     for (j = 0; j < nDefaultAtts; j++) {
       const DEFAULT_ATTRIBUTE *da = elementType->defaultAtts + j;
       if (!(da->id->name)[-1] && da->value) {
-        if (da->id->prefix) {
-          if (da->id->xmlns) {
-	    if (!addBinding(parser, da->id->prefix, da->id, da->value, bindingsPtr))
-	      return XML_ERROR_NO_MEMORY;
-	  }
-          else {
-	    (da->id->name)[-1] = 2;
-	    nPrefixes++;
-  	    appAtts[attIndex++] = da->id->name;
-	    appAtts[attIndex++] = da->value;
-	  }
-	}
-	else {
-	  (da->id->name)[-1] = 1;
-	  appAtts[attIndex++] = da->id->name;
-	  appAtts[attIndex++] = da->value;
-	}
+	(da->id->name)[-1] = 1;
+	appAtts[i << 1] = da->id->name;
+	appAtts[(i << 1) + 1] = da->value;
+	i++;
       }
     }
-    appAtts[attIndex] = 0;
+    appAtts[i << 1] = 0;
   }
-  i = 0;
-  if (nPrefixes) {
-    for (; i < attIndex; i += 2) {
-      if (appAtts[i][-1] == 2) {
-        ATTRIBUTE_ID *id;
-        ((XML_Char *)(appAtts[i]))[-1] = 0;
-	id = (ATTRIBUTE_ID *)lookup(&dtd.attributeIds, appAtts[i], 0);
-	if (id->prefix->binding) {
-	  int j;
-	  const BINDING *b = id->prefix->binding;
-	  const XML_Char *s = appAtts[i];
-	  for (j = 0; j < b->uriLen; j++) {
-	    if (!poolAppendChar(&tempPool, b->uri[j]))
-	      return XML_ERROR_NO_MEMORY;
-	  }
-	  while (*s++ != ':')
-	    ;
-	  do {
-	    if (!poolAppendChar(&tempPool, *s))
-	      return XML_ERROR_NO_MEMORY;
-	  } while (*s++);
-	  appAtts[i] = poolStart(&tempPool);
-	  poolFinish(&tempPool);
-	}
-	if (!--nPrefixes)
-	  break;
-      }
-      else
-	((XML_Char *)(appAtts[i]))[-1] = 0;
-    }
-  }
-  for (; i < attIndex; i += 2)
-    ((XML_Char *)(appAtts[i]))[-1] = 0;
-  if (!tagNamePtr)
-    return XML_ERROR_NONE;
-  for (binding = *bindingsPtr; binding; binding = binding->nextTagBinding)
-    binding->attId->name[-1] = 0;
-  if (elementType->prefix) {
-    binding = elementType->prefix->binding;
-    if (!binding)
-      return XML_ERROR_NONE;
-    localPart = *tagNamePtr;
-    while (*localPart++ != XML_T(':'))
-      ;
-  }
-  else if (dtd.defaultPrefix.binding) {
-    binding = dtd.defaultPrefix.binding;
-    localPart = *tagNamePtr;
-  }
-  else
-    return XML_ERROR_NONE;
-  i = binding->uriLen;
-  do {
-    if (i == binding->uriAlloc) {
-      binding->uri = realloc(binding->uri, binding->uriAlloc *= 2);
-      if (!binding->uri)
-	return XML_ERROR_NO_MEMORY;
-    }
-    binding->uri[i++] = *localPart;
-  } while (*localPart++);
-  *tagNamePtr = binding->uri;
+  while (i-- > 0)
+    ((XML_Char *)appAtts[i << 1])[-1] = 0;
   return XML_ERROR_NONE;
-}
-
-static
-int addBinding(XML_Parser parser, PREFIX *prefix, const ATTRIBUTE_ID *attId, const XML_Char *uri, BINDING **bindingsPtr)
-{
-  BINDING *b;
-  int len;
-  for (len = 0; uri[len]; len++)
-    ;
-  if (namespaceSeparator)
-    len++;
-  if (freeBindingList) {
-    b = freeBindingList;
-    if (len > b->uriAlloc) {
-      b->uri = realloc(b->uri, len + EXPAND_SPARE);
-      if (!b->uri)
-	return 0;
-      b->uriAlloc = len + EXPAND_SPARE;
-    }
-    freeBindingList = b->nextTagBinding;
-  }
-  else {
-    b = malloc(sizeof(BINDING));
-    if (!b)
-      return 0;
-    b->uri = malloc(sizeof(XML_Char) * len + EXPAND_SPARE);
-    if (!b->uri) {
-      free(b);
-      return 0;
-    }
-    b->uriAlloc = len;
-  }
-  b->uriLen = len;
-  memcpy(b->uri, uri, len * sizeof(XML_Char));
-  if (namespaceSeparator)
-    b->uri[len - 1] = namespaceSeparator;
-  b->prefix = prefix;
-  b->attId = attId;
-  b->prevPrefixBinding = b->prefix->binding;
-  b->prefix->binding = *uri == XML_T('\0') ? 0 : b;
-  b->nextTagBinding = *bindingsPtr;
-  *bindingsPtr = b;
-  return 1;
 }
 
 /* The idea here is to avoid using stack for each CDATA section when
@@ -1595,6 +1295,7 @@ enum XML_Error doCdataSection(XML_Parser parser,
 			      const char **nextPtr)
 {
   const char *s = *startPtr;
+  const char *dummy;
   const char **eventPP;
   const char **eventEndPP;
   if (enc == encoding) {
@@ -1602,11 +1303,8 @@ enum XML_Error doCdataSection(XML_Parser parser,
     *eventPP = s;
     eventEndPP = &eventEndPtr;
   }
-  else {
-    eventPP = &(openInternalEntities->internalEventPtr);
-    eventEndPP = &(openInternalEntities->internalEventEndPtr);
-  }
-  *eventPP = s;
+  else
+    eventPP = eventEndPP = &dummy;
   *startPtr = 0;
   for (;;) {
     const char *next;
@@ -1698,7 +1396,7 @@ initializeEncoding(XML_Parser parser)
 #else
   s = protocolEncodingName;
 #endif
-  if ((ns ? XmlInitEncodingNS : XmlInitEncoding)(&initEncoding, &encoding, s))
+  if (XmlInitEncoding(&initEncoding, &encoding, s))
     return XML_ERROR_NONE;
   return handleUnknownEncoding(parser, protocolEncodingName);
 }
@@ -1711,17 +1409,15 @@ processXmlDecl(XML_Parser parser, int isGeneralTextEntity,
   const ENCODING *newEncoding = 0;
   const char *version;
   int standalone = -1;
-  if (!(ns
-        ? XmlParseXmlDeclNS
-	: XmlParseXmlDecl)(isGeneralTextEntity,
-		           encoding,
-		           s,
-		           next,
-		           &eventPtr,
-		           &version,
-		           &encodingName,
-		           &newEncoding,
-		           &standalone))
+  if (!XmlParseXmlDecl(isGeneralTextEntity,
+		       encoding,
+		       s,
+		       next,
+		       &eventPtr,
+		       &version,
+		       &encodingName,
+		       &newEncoding,
+		       &standalone))
     return XML_ERROR_SYNTAX;
   if (!isGeneralTextEntity && standalone == 1)
     dtd.standalone = 1;
@@ -1773,12 +1469,10 @@ handleUnknownEncoding(XML_Parser parser, const XML_Char *encodingName)
 	  info.release(info.data);
 	return XML_ERROR_NO_MEMORY;
       }
-      enc = (ns
-	     ? XmlInitUnknownEncodingNS
-	     : XmlInitUnknownEncoding)(unknownEncodingMem,
-				       info.map,
-				       info.convert,
-				       info.data);
+      enc = XmlInitUnknownEncoding(unknownEncodingMem,
+				   info.map,
+				   info.convert,
+				   info.data);
       if (enc) {
 	unknownEncodingData = info.data;
 	unknownEncodingRelease = info.release;
@@ -1878,11 +1572,8 @@ prologProcessor(XML_Parser parser,
 	  return XML_ERROR_NO_MEMORY;
 	if (declElementType->name != name)
 	  poolDiscard(&dtd.pool);
-	else {
+	else
 	  poolFinish(&dtd.pool);
-	  if (!setElementTypePrefix(parser, declElementType))
-            return XML_ERROR_NO_MEMORY;
-	}
 	break;
       }
     case XML_ROLE_ATTRIBUTE_NAME:
@@ -2083,19 +1774,12 @@ prologProcessor(XML_Parser parser,
 	if (!reportProcessingInstruction(parser, encoding, s, next))
 	  return XML_ERROR_NO_MEMORY;
 	break;
-      case XML_TOK_COMMENT:
-	eventPtr = s;
-	eventEndPtr = next;
-	if (!reportComment(parser, encoding, s, next))
-	  return XML_ERROR_NO_MEMORY;
-	break;
       }
       break;
     }
     if (defaultHandler) {
       switch (tok) {
       case XML_TOK_PI:
-      case XML_TOK_COMMENT:
       case XML_TOK_BOM:
       case XML_TOK_XML_DECL:
 	break;
@@ -2134,15 +1818,12 @@ enum XML_Error epilogProcessor(XML_Parser parser,
 	*nextPtr = end;
       return XML_ERROR_NONE;
     case XML_TOK_PROLOG_S:
+    case XML_TOK_COMMENT:
       if (defaultHandler)
 	reportDefault(parser, encoding, s, next);
       break;
     case XML_TOK_PI:
       if (!reportProcessingInstruction(parser, encoding, s, next))
-	return XML_ERROR_NO_MEMORY;
-      break;
-    case XML_TOK_COMMENT:
-      if (!reportComment(parser, encoding, s, next))
 	return XML_ERROR_NO_MEMORY;
       break;
     case XML_TOK_INVALID:
@@ -2196,7 +1877,7 @@ appendAttributeValue(XML_Parser parser, const ENCODING *enc, int isCdata,
 		     const char *ptr, const char *end,
 		     STRING_POOL *pool)
 {
-  const ENCODING *internalEnc = ns ? XmlGetInternalEncodingNS() : XmlGetInternalEncoding();
+  const ENCODING *internalEnc = XmlGetInternalEncoding();
   for (;;) {
     const char *next;
     int tok = XmlAttributeValueTok(enc, ptr, end, &next);
@@ -2317,7 +1998,7 @@ enum XML_Error storeEntityValue(XML_Parser parser,
 				const char *entityTextPtr,
 				const char *entityTextEnd)
 {
-  const ENCODING *internalEnc = ns ? XmlGetInternalEncodingNS() : XmlGetInternalEncoding();
+  const ENCODING *internalEnc = XmlGetInternalEncoding();
   STRING_POOL *pool = &(dtd.pool);
   entityTextPtr += encoding->minBytesPerChar;
   entityTextEnd -= encoding->minBytesPerChar;
@@ -2436,48 +2117,25 @@ reportProcessingInstruction(XML_Parser parser, const ENCODING *enc, const char *
   return 1;
 }
 
-static int
-reportComment(XML_Parser parser, const ENCODING *enc, const char *start, const char *end)
-{
-  XML_Char *data;
-  if (!commentHandler) {
-    if (defaultHandler)
-      reportDefault(parser, enc, start, end);
-    return 1;
-  }
-  data = poolStoreString(&tempPool,
-                         enc,
-                         start + enc->minBytesPerChar * 4, 
-			 end - enc->minBytesPerChar * 3);
-  if (!data)
-    return 0;
-  normalizeLines(data);
-  commentHandler(handlerArg, data);
-  poolClear(&tempPool);
-  return 1;
-}
-
 static void
 reportDefault(XML_Parser parser, const ENCODING *enc, const char *s, const char *end)
 {
   if (MUST_CONVERT(enc, s)) {
-    const char **eventPP;
-    const char **eventEndPP;
-    if (enc == encoding) {
-      eventPP = &eventPtr;
-      eventEndPP = &eventEndPtr;
-    }
-    else {
-      eventPP = &(openInternalEntities->internalEventPtr);
-      eventEndPP = &(openInternalEntities->internalEventEndPtr);
-    }
-    do {
+    for (;;) {
       ICHAR *dataPtr = (ICHAR *)dataBuf;
       XmlConvert(enc, &s, end, &dataPtr, (ICHAR *)dataBufEnd);
-      *eventEndPP = s;
-      defaultHandler(handlerArg, dataBuf, dataPtr - (ICHAR *)dataBuf);
-      *eventPP = s;
-    } while (s != end);
+      if (s == end) {
+	defaultHandler(handlerArg, dataBuf, dataPtr - (ICHAR *)dataBuf);
+	break;
+      }
+      if (enc == encoding) {
+	eventEndPtr = s;
+	defaultHandler(handlerArg, dataBuf, dataPtr - (ICHAR *)dataBuf);
+	eventPtr = s;
+      }
+      else
+	defaultHandler(handlerArg, dataBuf, dataPtr - (ICHAR *)dataBuf);
+    }
   }
   else
     defaultHandler(handlerArg, (XML_Char *)s, (XML_Char *)end - (XML_Char *)s);
@@ -2511,33 +2169,6 @@ defineAttribute(ELEMENT_TYPE *type, ATTRIBUTE_ID *attId, int isCdata, const XML_
   return 1;
 }
 
-static int setElementTypePrefix(XML_Parser parser, ELEMENT_TYPE *elementType)
-{
-  const XML_Char *name;
-  for (name = elementType->name; *name; name++) {
-    if (*name == XML_T(':')) {
-      PREFIX *prefix;
-      const XML_Char *s;
-      for (s = elementType->name; s != name; s++) {
-	if (!poolAppendChar(&dtd.pool, *s))
-	  return 0;
-      }
-      if (!poolAppendChar(&dtd.pool, XML_T('\0')))
-	return 0;
-      prefix = (PREFIX *)lookup(&dtd.prefixes, poolStart(&dtd.pool), sizeof(PREFIX));
-      if (!prefix)
-	return 0;
-      if (prefix->name == poolStart(&dtd.pool))
-	poolFinish(&dtd.pool);
-      else
-	poolDiscard(&dtd.pool);
-      elementType->prefix = prefix;
-
-    }
-  }
-  return 1;
-}
-
 static ATTRIBUTE_ID *
 getAttributeId(XML_Parser parser, const ENCODING *enc, const char *start, const char *end)
 {
@@ -2554,94 +2185,15 @@ getAttributeId(XML_Parser parser, const ENCODING *enc, const char *start, const 
     return 0;
   if (id->name != name)
     poolDiscard(&dtd.pool);
-  else {
+  else
     poolFinish(&dtd.pool);
-    if (!ns)
-      ;
-    else if (name[0] == 'x'
-	&& name[1] == 'm'
-	&& name[2] == 'l'
-	&& name[3] == 'n'
-	&& name[4] == 's'
-	&& (name[5] == XML_T('\0') || name[5] == XML_T(':'))) {
-      if (name[5] == '\0')
-	id->prefix = &dtd.defaultPrefix;
-      else
-	id->prefix = (PREFIX *)lookup(&dtd.prefixes, name + 6, sizeof(PREFIX));
-      id->xmlns = 1;
-    }
-    else {
-      int i;
-      for (i = 0; name[i]; i++) {
-	if (name[i] == XML_T(':')) {
-	  int j;
-	  for (j = 0; j < i; j++) {
-	    if (!poolAppendChar(&dtd.pool, name[j]))
-	      return 0;
-	  }
-	  if (!poolAppendChar(&dtd.pool, XML_T('\0')))
-	    return 0;
-	  id->prefix = (PREFIX *)lookup(&dtd.prefixes, poolStart(&dtd.pool), sizeof(PREFIX));
-	  if (id->prefix->name == poolStart(&dtd.pool))
-	    poolFinish(&dtd.pool);
-	  else
-	    poolDiscard(&dtd.pool);
-	  break;
-	}
-      }
-    }
-  }
   return id;
 }
 
-#define CONTEXT_SEP XML_T('\f')
-
 static
-const XML_Char *getContext(XML_Parser parser)
+const XML_Char *getOpenEntityNames(XML_Parser parser)
 {
   HASH_TABLE_ITER iter;
-  int needSep = 0;
-
-  if (dtd.defaultPrefix.binding) {
-    int i;
-    int len;
-    if (!poolAppendChar(&tempPool, XML_T('=')))
-      return 0;
-    len = dtd.defaultPrefix.binding->uriLen;
-    if (namespaceSeparator != XML_T('\0'))
-      len--;
-    for (i = 0; i < len; i++)
-      if (!poolAppendChar(&tempPool, dtd.defaultPrefix.binding->uri[i]))
-  	return 0;
-    needSep = 1;
-  }
-
-  hashTableIterInit(&iter, &(dtd.prefixes));
-  for (;;) {
-    int i;
-    int len;
-    const XML_Char *s;
-    PREFIX *prefix = (PREFIX *)hashTableIterNext(&iter);
-    if (!prefix)
-      break;
-    if (!prefix->binding)
-      continue;
-    if (needSep && !poolAppendChar(&tempPool, CONTEXT_SEP))
-      return 0;
-    for (s = prefix->name; *s; s++)
-      if (!poolAppendChar(&tempPool, *s))
-        return 0;
-    if (!poolAppendChar(&tempPool, XML_T('=')))
-      return 0;
-    len = prefix->binding->uriLen;
-    if (namespaceSeparator != XML_T('\0'))
-      len--;
-    for (i = 0; i < len; i++)
-      if (!poolAppendChar(&tempPool, prefix->binding->uri[i]))
-        return 0;
-    needSep = 1;
-  }
-
 
   hashTableIterInit(&iter, &(dtd.generalEntities));
   for (;;) {
@@ -2651,12 +2203,11 @@ const XML_Char *getContext(XML_Parser parser)
       break;
     if (!e->open)
       continue;
-    if (needSep && !poolAppendChar(&tempPool, CONTEXT_SEP))
+    if (poolLength(&tempPool) > 0 && !poolAppendChar(&tempPool, XML_T(' ')))
       return 0;
     for (s = e->name; *s; s++)
       if (!poolAppendChar(&tempPool, *s))
         return 0;
-    needSep = 1;
   }
 
   if (!poolAppendChar(&tempPool, XML_T('\0')))
@@ -2665,49 +2216,21 @@ const XML_Char *getContext(XML_Parser parser)
 }
 
 static
-int setContext(XML_Parser parser, const XML_Char *context)
+int setOpenEntityNames(XML_Parser parser, const XML_Char *openEntityNames)
 {
-  const XML_Char *s = context;
-
-  while (*context != XML_T('\0')) {
-    if (*s == CONTEXT_SEP || *s == XML_T('\0')) {
+  const XML_Char *s = openEntityNames;
+  while (*openEntityNames != XML_T('\0')) {
+    if (*s == XML_T(' ') || *s == XML_T('\0')) {
       ENTITY *e;
       if (!poolAppendChar(&tempPool, XML_T('\0')))
 	return 0;
       e = (ENTITY *)lookup(&dtd.generalEntities, poolStart(&tempPool), 0);
       if (e)
 	e->open = 1;
-      if (*s != XML_T('\0'))
+      if (*s == XML_T(' '))
 	s++;
-      context = s;
+      openEntityNames = s;
       poolDiscard(&tempPool);
-    }
-    else if (*s == '=') {
-      PREFIX *prefix;
-      if (poolLength(&tempPool) == 0)
-	prefix = &dtd.defaultPrefix;
-      else {
-	if (!poolAppendChar(&tempPool, XML_T('\0')))
-	  return 0;
-	prefix = (PREFIX *)lookup(&dtd.prefixes, poolStart(&tempPool), sizeof(PREFIX));
-	if (!prefix)
-	  return 0;
-        if (prefix->name == poolStart(&tempPool))
-          poolFinish(&tempPool);
-        else
-	  poolDiscard(&tempPool);
-      }
-      for (context = s + 1; *context != CONTEXT_SEP && *context != XML_T('\0'); context++)
-        if (!poolAppendChar(&tempPool, *context))
-          return 0;
-      if (!poolAppendChar(&tempPool, XML_T('\0')))
-	return 0;
-      if (!addBinding(parser, prefix, 0, poolStart(&tempPool), &inheritedBindings))
-	return 0;
-      poolDiscard(&tempPool);
-      if (*context != XML_T('\0'))
-	++context;
-      s = context;
     }
     else {
       if (!poolAppendChar(&tempPool, *s))
@@ -2747,12 +2270,9 @@ static int dtdInit(DTD *p)
   hashTableInit(&(p->generalEntities));
   hashTableInit(&(p->elementTypes));
   hashTableInit(&(p->attributeIds));
-  hashTableInit(&(p->prefixes));
   p->complete = 1;
   p->standalone = 0;
   p->base = 0;
-  p->defaultPrefix.name = 0;
-  p->defaultPrefix.binding = 0;
   return 1;
 }
 
@@ -2770,7 +2290,6 @@ static void dtdDestroy(DTD *p)
   hashTableDestroy(&(p->generalEntities));
   hashTableDestroy(&(p->elementTypes));
   hashTableDestroy(&(p->attributeIds));
-  hashTableDestroy(&(p->prefixes));
   poolDestroy(&(p->pool));
 }
 
@@ -2786,21 +2305,6 @@ static int dtdCopy(DTD *newDtd, const DTD *oldDtd)
     if (!tem)
       return 0;
     newDtd->base = tem;
-  }
-
-  /* Copy the prefix table. */
-
-  hashTableIterInit(&iter, &(oldDtd->prefixes));
-  for (;;) {
-    const XML_Char *name;
-    const PREFIX *oldP = (PREFIX *)hashTableIterNext(&iter);
-    if (!oldP)
-      break;
-    name = poolCopyString(&(newDtd->pool), oldP->name);
-    if (!name)
-      return 0;
-    if (!lookup(&(newDtd->prefixes), name, sizeof(PREFIX)))
-      return 0;
   }
 
   hashTableIterInit(&iter, &(oldDtd->attributeIds));
@@ -2825,13 +2329,6 @@ static int dtdCopy(DTD *newDtd, const DTD *oldDtd)
     if (!newA)
       return 0;
     newA->maybeTokenized = oldA->maybeTokenized;
-    if (oldA->prefix) {
-      newA->xmlns = oldA->xmlns;
-      if (oldA->prefix == &oldDtd->defaultPrefix)
-	newA->prefix = &newDtd->defaultPrefix;
-      else
-	newA->prefix = (PREFIX *)lookup(&(newDtd->prefixes), oldA->prefix->name, 0);
-    }
   }
 
   /* Copy the element type table. */
@@ -2851,14 +2348,10 @@ static int dtdCopy(DTD *newDtd, const DTD *oldDtd)
     newE = (ELEMENT_TYPE *)lookup(&(newDtd->elementTypes), name, sizeof(ELEMENT_TYPE));
     if (!newE)
       return 0;
-    if (oldE->nDefaultAtts) {
-      newE->defaultAtts = (DEFAULT_ATTRIBUTE *)malloc(oldE->nDefaultAtts * sizeof(DEFAULT_ATTRIBUTE));
-      if (!newE->defaultAtts)
-	return 0;
-    }
+    newE->defaultAtts = (DEFAULT_ATTRIBUTE *)malloc(oldE->nDefaultAtts * sizeof(DEFAULT_ATTRIBUTE));
+    if (!newE->defaultAtts)
+      return 0;
     newE->allocDefaultAtts = newE->nDefaultAtts = oldE->nDefaultAtts;
-    if (oldE->prefix)
-      newE->prefix = (PREFIX *)lookup(&(newDtd->prefixes), oldE->prefix->name, 0);
     for (i = 0; i < newE->nDefaultAtts; i++) {
       newE->defaultAtts[i].id = (ATTRIBUTE_ID *)lookup(&(newDtd->attributeIds), oldE->defaultAtts[i].id->name, 0);
       newE->defaultAtts[i].isCdata = oldE->defaultAtts[i].isCdata;
