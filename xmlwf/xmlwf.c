@@ -28,6 +28,10 @@ Contributor(s):
 #include "xmlfile.h"
 #include "xmltchar.h"
 
+#ifdef XML_URL
+#include "xmlurl.h"
+#endif
+
 #ifdef _MSC_VER
 #include <crtdbg.h>
 #endif
@@ -433,6 +437,9 @@ int tmain(int argc, XML_Char **argv)
   int windowsCodePages = 0;
   int outputType = 0;
   int useNamespaces = 0;
+#ifdef XML_URL
+  int url = 0;
+#endif
 
 #ifdef _MSC_VER
   _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF|_CRTDBG_LEAK_CHECK_DF);
@@ -459,6 +466,12 @@ int tmain(int argc, XML_Char **argv)
       processFlags |= XML_EXTERNAL_ENTITIES;
       j++;
     }
+#ifdef XML_URL
+    if (argv[i][j] == T('u')) {
+      url = 1;
+      j++;
+    }
+#endif
     if (argv[i][j] == T('w')) {
       windowsCodePages = 1;
       j++;
@@ -504,6 +517,10 @@ int tmain(int argc, XML_Char **argv)
   }
   if (i == argc)
     usage(argv[0]);
+#ifdef XML_URL
+  if (url)
+    XML_URLInit();
+#endif
   for (; i < argc; i++) {
     FILE *fp = 0;
     XML_Char *outName = 0;
@@ -573,7 +590,12 @@ int tmain(int argc, XML_Char **argv)
     }
     if (windowsCodePages)
       XML_SetUnknownEncodingHandler(parser, unknownEncoding, 0);
-    result = XML_ProcessFile(parser, argv[i], processFlags);
+#ifdef XML_URL
+    if (url)
+      result = XML_ProcessURL(parser, argv[i], 0);
+    else
+#endif
+      result = XML_ProcessFile(parser, argv[i], processFlags);
     if (outputDir) {
       if (outputType == 'm')
 	metaEndDocument(parser);
@@ -584,5 +606,9 @@ int tmain(int argc, XML_Char **argv)
     }
     XML_ParserFree(parser);
   }
+#ifdef XML_URL
+  if (url)
+    XML_URLUninit();
+#endif
   return 0;
 }
