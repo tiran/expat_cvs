@@ -95,7 +95,11 @@ enum XML_Error {
   /* Added in 2.0. */
   XML_ERROR_RESERVED_PREFIX_XML,
   XML_ERROR_RESERVED_PREFIX_XMLNS,
-  XML_ERROR_RESERVED_NAMESPACE_URI
+  XML_ERROR_RESERVED_NAMESPACE_URI,
+#ifdef XML_BOMB_PROTECTION
+  XML_ERROR_ENTITY_INDIRECTIONS,
+  XML_ERROR_ENTITY_EXPANSION
+#endif
 };
 
 enum XML_Content_Type {
@@ -967,6 +971,44 @@ XML_GetInputContext(XML_Parser parser,
 #define XML_GetErrorColumnNumber XML_GetCurrentColumnNumber
 #define XML_GetErrorByteIndex    XML_GetCurrentByteIndex
 
+/* Protection against XML bomb DoS attacks */
+#ifdef XML_BOMB_PROTECTION
+
+/* Limit the amount of indirection during entity expansion of nested entity.
+   This protects the parser against exponential entity expansion attacks (aka
+   billion laughs attack).
+   A value of 0 disables the protection.
+ */
+
+#ifndef XML_DEFAULT_MAX_ENTITY_INDIRECTIONS
+#define XML_DEFAULT_MAX_ENTITY_INDIRECTIONS 40
+#endif
+XMLPARSEAPI(unsigned int) XML_GetMaxEntityIndirections(XML_Parser parser);
+void XML_SetMaxEntityIndirections(XML_Parser parser, unsigned int value);
+
+
+/* Limit the total length of all expanded entities throughout the document.
+   The length of all entity is accumulated in a parser variable. The setting
+   limits the vulnerability against quadratic blowup attacks.
+   A value of 0 disables the protection.
+ */
+#ifndef XML_DEFAULT_MAX_ENTITY_EXPANSIONS
+#define XML_DEFAULT_MAX_ENTITY_EXPANSIONS 1 << 23 /* 8 MiB */
+#endif
+XMLPARSEAPI(unsigned int) XML_GetEntityExpansions(XML_Parser parser);
+XMLPARSEAPI(unsigned int) XML_GetMaxEntityExpansions(XML_Parser parser);
+void XML_SetMaxEntityExpansions(XML_Parser parser, unsigned int value);
+
+/* Reset all DTD information after the <!DOCTYPE> block has been parsed. When
+   flag is set (default: false) all DTD information like entity definitions
+   are reset after the endDoctypeDeclHandler has been called. The flag can be
+   set inside the endDoctypeDeclHandler.
+ */
+XMLPARSEAPI(XML_Bool) XML_GetResetDTDFlag(XML_Parser parser);
+void XML_SetResetDTDFlag(XML_Parser parser, XML_Bool value);
+
+#endif /* XML_BOMB_PROTECTION */
+
 /* Frees the content model passed to the element declaration handler */
 XMLPARSEAPI(void)
 XML_FreeContentModel(XML_Parser parser, XML_Content *model);
@@ -1017,7 +1059,12 @@ enum XML_FeatureEnum {
   XML_FEATURE_SIZEOF_XML_LCHAR,
   XML_FEATURE_NS,
   XML_FEATURE_LARGE_SIZE,
-  XML_FEATURE_ATTR_INFO
+  XML_FEATURE_ATTR_INFO,
+#ifdef XML_BOMB_PROTECTION
+  XML_FEATURE_MAX_ENTITY_INDIRECTIONS,
+  XML_FEATURE_MAX_ENTITY_EXPANSIONS,
+  XML_FEATURE_IGNORE_DTD
+#endif
   /* Additional features must be added to the end of this enum. */
 };
 
