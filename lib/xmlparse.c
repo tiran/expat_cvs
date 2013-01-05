@@ -4887,13 +4887,11 @@ processInternalEntity(XML_Parser parser, ENTITY *entity,
     return XML_ERROR_ENTITY_INDIRECTIONS;
   }
   if (maxEntityExpansions) {
-    unsigned long tmp;
-    tmp = entityExpansions + entity->textLen;
-    if (tmp < entityExpansions) {
+    if (entity->textLen > UINT_MAX - entityExpansions) {
         /* overflow */
         return XML_ERROR_ENTITY_EXPANSION;
     }
-    entityExpansions = tmp;
+    entityExpansions = entityExpansions + entity->textLen;
     if (entityExpansions > maxEntityExpansions) {
       return XML_ERROR_ENTITY_EXPANSION;
     }
