@@ -5,6 +5,18 @@
 #ifndef Expat_INCLUDED
 #define Expat_INCLUDED 1
 
+#ifdef COMPILED_FROM_DSP
+#include "winconfig.h"
+#elif defined(MACOS_CLASSIC)
+#include "macconfig.h"
+#elif defined(__amigaos__)
+#include "amigaconfig.h"
+#elif defined(__WATCOMC__)
+#include "watcomconfig.h"
+#elif defined(HAVE_EXPAT_CONFIG_H)
+#include <expat_config.h>
+#endif /* ndef COMPILED_FROM_DSP */
+
 #ifdef __VMS
 /*      0        1         2         3      0        1         2         3
         1234567890123456789012345678901     1234567890123456789012345678901 */
