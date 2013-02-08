@@ -763,7 +763,7 @@ parserCreate(const XML_Char *encodingName,
   maxEntityIndirections = XML_DEFAULT_MAX_ENTITY_INDIRECTIONS;
   entityExpansions = 0;
   maxEntityExpansions = XML_DEFAULT_MAX_ENTITY_EXPANSIONS;
-  resetDTDFlag = XML_FALSE;
+  resetDTDFlag = XML_RESET_DTD_FLAG_DEFAULT;
 #endif
 
   attsSize = INIT_ATTS_SIZE;

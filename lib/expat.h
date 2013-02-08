@@ -1016,6 +1016,9 @@ void XML_SetMaxEntityExpansions(XML_Parser parser, unsigned int value);
    are reset after the endDoctypeDeclHandler has been called. The flag can be
    set inside the endDoctypeDeclHandler.
  */
+#ifndef XML_DTD_RESET_FLAG_DEFAULT
+#define XML_DTD_RESET_FLAG_DEFAULT XML_FALSE
+#endif
 XMLPARSEAPI(XML_Bool) XML_GetResetDTDFlag(XML_Parser parser);
 void XML_SetResetDTDFlag(XML_Parser parser, XML_Bool value);
 
