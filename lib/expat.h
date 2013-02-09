@@ -109,6 +109,7 @@ enum XML_Error {
   XML_ERROR_RESERVED_PREFIX_XMLNS,
   XML_ERROR_RESERVED_NAMESPACE_URI,
 #ifdef XML_BOMB_PROTECTION
+  /* Added in 2.2. */
   XML_ERROR_ENTITY_INDIRECTIONS,
   XML_ERROR_ENTITY_EXPANSION
 #endif
@@ -983,12 +984,17 @@ XML_GetInputContext(XML_Parser parser,
 #define XML_GetErrorColumnNumber XML_GetCurrentColumnNumber
 #define XML_GetErrorByteIndex    XML_GetCurrentByteIndex
 
-/* Protection against XML bomb DoS attacks */
+/* Protection against XML bomb DoS attacks
+   Added in 2.2.
+ */
 #ifdef XML_BOMB_PROTECTION
 
-/* Limit the amount of indirection during entity expansion of nested entity.
-   This protects the parser against exponential entity expansion attacks (aka
-   billion laughs attack).
+/* Limit the amount of indirections that are allowed to occur during the
+   expansion of a nested entity. The counter starts when an entity reference
+   is encountered. It resets after the entity is fully expanded. The limit
+   protects the parser against exponential entity expansion attacks (aka
+   billion laughs attack). When the limit is exceeded the parser stops and
+   fails with `XML_ERROR_ENTITY_INDIRECTIONS`.
    A value of 0 disables the protection.
  */
 
@@ -999,9 +1005,11 @@ XMLPARSEAPI(unsigned int) XML_GetMaxEntityIndirections(XML_Parser parser);
 void XML_SetMaxEntityIndirections(XML_Parser parser, unsigned int value);
 
 
-/* Limit the total length of all expanded entities throughout the document.
-   The length of all entity is accumulated in a parser variable. The setting
-   limits the vulnerability against quadratic blowup attacks.
+/* Limit the total length of all entity expansions throughout the entire
+   document. The lengths of all entity are accumulated in a parser variable.
+   The setting protects against quadratic blowup attacks (lots of expansions
+   of a large entity declaration). When the sum of all entities exceeds
+   the limit, the parser stops and fails with `XML_ERROR_ENTITY_EXPANSION`.
    A value of 0 disables the protection.
  */
 #ifndef XML_DEFAULT_MAX_ENTITY_EXPANSIONS
@@ -1012,9 +1020,10 @@ XMLPARSEAPI(unsigned int) XML_GetMaxEntityExpansions(XML_Parser parser);
 void XML_SetMaxEntityExpansions(XML_Parser parser, unsigned int value);
 
 /* Reset all DTD information after the <!DOCTYPE> block has been parsed. When
-   flag is set (default: false) all DTD information like entity definitions
-   are reset after the endDoctypeDeclHandler has been called. The flag can be
-   set inside the endDoctypeDeclHandler.
+   the flag is set (default: false) all DTD information after the
+   endDoctypeDeclHandler has been called. The flag can be set inside the
+   endDoctypeDeclHandler. Without DTD information any entity reference in
+   the document body leads to a XML_ERROR_UNDEFINED_ENTITY.
  */
 #ifndef XML_DTD_RESET_FLAG_DEFAULT
 #define XML_DTD_RESET_FLAG_DEFAULT XML_FALSE
@@ -1076,6 +1085,7 @@ enum XML_FeatureEnum {
   XML_FEATURE_LARGE_SIZE,
   XML_FEATURE_ATTR_INFO,
 #ifdef XML_BOMB_PROTECTION
+  /* Added in 2.2. */
   XML_FEATURE_MAX_ENTITY_INDIRECTIONS,
   XML_FEATURE_MAX_ENTITY_EXPANSIONS,
   XML_FEATURE_IGNORE_DTD
