@@ -2297,6 +2297,8 @@ doContent(XML_Parser parser,
 {
   /* save one level of indirection */
   DTD * const dtd = _dtd;
+  const char **eventPP;
+  const char **eventEndPP;
 
 #ifdef XML_BOMB_PROTECTION
   if (haveMore) {
@@ -2304,8 +2306,6 @@ doContent(XML_Parser parser,
   }
 #endif
 
-  const char **eventPP;
-  const char **eventEndPP;
   if (enc == encoding) {
     eventPP = &eventPtr;
     eventEndPP = &eventEndPtr;
