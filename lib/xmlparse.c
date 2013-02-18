@@ -1917,7 +1917,7 @@ XML_GetFeature(XML_Parser parser, enum XML_FeatureEnum feature, long *value) {
         *value = (long)resetDTDFlag;
         return 1;
     default:
-        errno = ENOTSUP;
+        errno = ENOENT;
         return 0;
     }
 }
@@ -1948,7 +1948,7 @@ XML_SetFeature(XML_Parser parser, enum XML_FeatureEnum feature, long value) {
             return 0;
         }
     default:
-        errno = ENOTSUP;
+        errno = ENOENT;
         return 0;
     }
 }
@@ -1966,7 +1966,7 @@ XML_GetFeatureDefault(enum XML_FeatureEnum feature, long *value) {
         *value = (long)defaultResetDTDFlag;
         return 1;
     default:
-        errno = ENOTSUP;
+        errno = ENOENT;
         return 0;
     }
 }
@@ -1997,7 +1997,7 @@ XML_SetFeatureDefault(enum XML_FeatureEnum feature, long value) {
             return 0;
         }
     default:
-        errno = ENOTSUP;
+        errno = ENOENT;
         return 0;
     }
 }
