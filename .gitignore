@@ -23,3 +23,11 @@ Makefile
 tests/runtests
 tests/runtestspp
 xmlwf/xmlwf
+Makefile.in
+conftools/compile
+conftools/missing
+examples/elements
+examples/outline
+stamp-h1
+
+

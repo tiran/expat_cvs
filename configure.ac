@@ -32,6 +32,7 @@ undefine([expat_version])
 AC_CONFIG_SRCDIR(Makefile.in)
 AC_CONFIG_AUX_DIR(conftools)
 AC_CONFIG_MACRO_DIR([m4])
+AM_INIT_AUTOMAKE([foreign])
 
 
 dnl

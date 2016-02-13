@@ -8,7 +8,7 @@
 #
 
 #CVSROOT=':ext:cvs.libexpat.org:/cvsroot/expat'
-CVSROOT=':pserver:anonymous@expat.cvs.sourceforge.net:/cvsroot/expat'
+#CVSROOT=':pserver:anonymous@expat.cvs.sourceforge.net:/cvsroot/expat'
 
 if test $# != 1; then
   echo "USAGE: $0 tagname"
@@ -22,7 +22,8 @@ if test -e $tmpdir; then
 fi
 
 echo "Checking out into temporary area: $tmpdir"
-cvs -fq -d "$CVSROOT" export -r "$1" -d $tmpdir expat || exit 1
+mkdir $tmpdir
+git checkout-index -a -f --prefix=$tmpdir/
 
 echo ""
 echo "----------------------------------------------------------------------"

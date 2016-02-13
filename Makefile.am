@@ -38,7 +38,6 @@ top_builddir = .
 
 INSTALL = @INSTALL@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
-INSTALL_DATA = @INSTALL_DATA@
 mkinstalldirs = $(SHELL) $(top_srcdir)/conftools/mkinstalldirs
 
 MANFILE = $(srcdir)/doc/xmlwf.1
@@ -129,9 +128,6 @@ LIB_OBJS = lib/xmlparse.lo lib/xmltok.lo lib/xmlrole.lo
 $(LIBRARY): $(LIB_OBJS)
 	$(LINK_LIB) $(LIB_OBJS)
 
-expat.pc: $(top_builddir)/config.status
-	cd $(top_builddir) && $(SHELL) ./config.status $@
-
 lib/xmlparse.lo: lib/xmlparse.c lib/expat.h lib/xmlrole.h lib/xmltok.h \
 	$(top_builddir)/expat_config.h lib/expat_external.h lib/internal.h
 
@@ -186,7 +182,7 @@ tests/XML-Test-Suite: tests/xmlts.zip
 run-xmltest: xmlwf/xmlwf@EXEEXT@ tests/XML-Test-Suite
 	tests/xmltest.sh
 
-.SUFFIXES: .c .cpp .lo .@OBJEXT@
+SUFFIXES = .c .cpp .lo .@OBJEXT@
 
 .cpp.@OBJEXT@:
 	$(CXXCOMPILE) -o $@ -c $<
